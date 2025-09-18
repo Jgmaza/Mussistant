@@ -1,4 +1,4 @@
-// Environment configuration for Setlist to Playlist
+// Environment configuration for Musisstant
 export const config = {
   spotify: {
     clientId: import.meta.env.VITE_SPOTIFY_CLIENT_ID || "your_spotify_client_id",
@@ -6,7 +6,7 @@ export const config = {
     scopes: ["playlist-modify-public", "playlist-modify-private", "user-read-email"],
   },
   app: {
-    name: import.meta.env.VITE_APP_NAME || "Setlist to Playlist",
+    name: import.meta.env.VITE_APP_NAME || "Musisstant",
   },
 } as const;
 

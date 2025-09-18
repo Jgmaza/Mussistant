@@ -1,20 +1,25 @@
-# Setlist to Playlist
+# Musisstant
 
-Convert your music setlists into Spotify playlists in minutes! A powerful tool for musicians, DJs, and music enthusiasts to transform setlists into shareable Spotify playlists.
+Your AI music assistant for Spotify playlists. Transform setlists into Spotify playlists in minutes with OCR support, user authentication, and intelligent matching.
 
 ## Features
 
-✨ **Dual Input Methods**
+✨ **User Authentication**
+- Secure login with Supabase Auth
+- User profiles and session management
+- Protected playlist creation
+
+🎵 **Dual Input Methods**
 - **Text Input**: Paste your setlist directly 
 - **Image Upload**: Upload photos of printed/handwritten setlists with OCR
 
-🎵 **Smart Song Matching**
+🚀 **Smart Song Matching**
 - Automatic Spotify catalog matching
 - Artist and title recognition
 - Confidence scoring for matches
 - Manual correction capabilities
 
-🚀 **One-Click Playlist Creation**
+🎧 **One-Click Playlist Creation**
 - Direct Spotify integration with PKCE authentication
 - Instant playlist generation
 - Shareable playlist links
@@ -23,7 +28,8 @@ Convert your music setlists into Spotify playlists in minutes! A powerful tool f
 
 - **Frontend**: React 18 + TypeScript + Vite
 - **UI**: Tailwind CSS + shadcn/ui components
-- **Authentication**: Spotify OAuth 2.0 with PKCE (no backend required)
+- **Authentication**: Supabase Auth + Spotify OAuth 2.0 with PKCE
+- **Database**: Supabase (PostgreSQL)
 - **OCR**: Tesseract.js for client-side text extraction
 - **State Management**: Zustand + React Query
 - **Routing**: React Router v6
@@ -32,8 +38,9 @@ Convert your music setlists into Spotify playlists in minutes! A powerful tool f
 
 ### Prerequisites
 
-- Node.js 16+ and npm/yarn/pnpm
+- Node.js 18+ and npm/yarn/pnpm/bun
 - Spotify Developer Account
+- Supabase Account (already connected)
 
 ### Setup
 
@@ -73,6 +80,10 @@ Visit http://localhost:8080 to use the app!
 
 ## Usage
 
+### Getting Started
+1. **Sign up or sign in** to your account
+2. **Connect your Spotify account** via secure OAuth
+
 ### Text Input Method
 1. Paste your setlist in the text area
 2. Supports formats like:
@@ -88,14 +99,17 @@ Visit http://localhost:8080 to use the app!
 ### Creating Playlists
 1. Review extracted songs and matches
 2. Edit any incorrect matches manually
-3. Connect to Spotify when ready
-4. Set playlist name and description
-5. Create and share your playlist!
+3. Set playlist name and description
+4. Create and share your playlist!
 
-## Spotify Integration
+## Authentication & Security
 
-This app uses Spotify's Authorization Code with PKCE flow for secure authentication without requiring a backend server. Required scopes:
+- **Supabase Auth**: Secure user authentication and session management
+- **Spotify PKCE**: Authorization Code with PKCE flow (no client secret required)
+- **Row Level Security**: Database-level security policies
+- **User Isolation**: Each user only accesses their own data
 
+Required Spotify scopes:
 - `playlist-modify-public` - Create public playlists
 - `playlist-modify-private` - Create private playlists  
 - `user-read-email` - Get user profile info
@@ -108,8 +122,10 @@ src/
 ├── auth/          # PKCE authentication utilities  
 ├── components/    # Reusable UI components
 ├── config/        # Environment configuration
+├── hooks/         # Custom React hooks (auth, etc.)
+├── integrations/  # Supabase client and types
 ├── ocr/           # Tesseract.js OCR processing
-├── pages/         # Main app pages (Home, Review, Callback)
+├── pages/         # Main app pages (Home, Auth, Review, Callback)
 ├── state/         # Session management context
 ├── store/         # Zustand state store
 └── utils/         # Parsing and matching utilities
@@ -127,9 +143,16 @@ src/
 ### Key Components
 
 - **Home**: Input methods (text/OCR) and song extraction
+- **Auth**: User authentication (sign up/sign in)
 - **Review**: Song matching, editing, and playlist creation  
 - **Callback**: OAuth callback handling
+- **Navbar**: Navigation with auth state
 - **OcrDropzone**: Drag-and-drop image processing
+
+### Database Schema
+
+The app uses Supabase with the following tables:
+- `profiles`: User profiles linked to auth.users with Spotify connection status
 
 ## Deployment
 
@@ -139,7 +162,9 @@ Build the app for production:
 npm run build
 ```
 
-Deploy the `dist` folder to any static hosting service. Update your Spotify app's redirect URI to match your production domain.
+Deploy the `dist` folder to any static hosting service. 
+
+**Important**: Update your Spotify app's redirect URI and Supabase Auth settings to match your production domain.
 
 ## Contributing
 

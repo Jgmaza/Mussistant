@@ -7,6 +7,7 @@ import { SessionProvider } from "@/state/session";
 import Home from "./pages/Home";
 import Review from "./pages/Review";
 import Callback from "./pages/Callback";
+import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -20,6 +21,7 @@ const App = () => (
         <BrowserRouter>
           <Routes>
             <Route path="/" element={<Home />} />
+            <Route path="/auth" element={<Auth />} />
             <Route path="/review" element={<Review />} />
             <Route path="/callback" element={<Callback />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
