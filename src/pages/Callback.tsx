@@ -6,12 +6,16 @@ import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { exchangeCodeForTokens } from "@/auth/spotifyAuth";
 import { getCurrentUserProfile } from "@/api/spotify";
 import { useSession } from "@/state/session";
+import { useSpotify } from "@/hooks/useSpotify";
+import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/hooks/use-toast";
 
 const Callback = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { setUser, setTokens } = useSession();
+  const { connectSpotify } = useSpotify();
+  const { isAuthenticated } = useAuth();
   const [status, setStatus] = useState<"processing" | "success" | "error">("processing");
   const [errorMessage, setErrorMessage] = useState("");
 
@@ -36,35 +40,38 @@ const Callback = () => {
         }
 
         // Exchange code for tokens
-        const tokenData = await exchangeCodeForTokens(code, codeVerifier);
+        const tokens = await exchangeCodeForTokens(code, codeVerifier);
         
-        // Calculate token expiration
-        const expiresAt = Date.now() + tokenData.expires_in * 1000;
-        
-        setTokens({
-          access_token: tokenData.access_token,
-          refresh_token: tokenData.refresh_token,
-          expires_at: expiresAt,
-        });
+      // Store tokens in session for immediate use
+      setTokens({
+        access_token: tokens.access_token,
+        refresh_token: tokens.refresh_token,
+        expires_at: Date.now() + tokens.expires_in * 1000,
+      });
 
-        // Get user profile
-        const userProfile = await getCurrentUserProfile(tokenData.access_token);
-        setUser(userProfile);
+      // If user is authenticated with Supabase, connect Spotify to their profile
+      if (isAuthenticated) {
+        await connectSpotify(tokens.access_token, tokens.refresh_token, tokens.expires_in);
+      } else {
+        // For non-authenticated users, just get the profile for session
+        const user = await getCurrentUserProfile(tokens.access_token);
+        setUser(user);
+      }
 
-        // Clean up
-        sessionStorage.removeItem("spotify_code_verifier");
+      
+      // Clean up
+      sessionStorage.removeItem("spotify_code_verifier");
 
-        setStatus("success");
-        
-        toast({
-          title: "Successfully connected to Spotify!",
-          description: `Welcome, ${userProfile.display_name}`,
-        });
-
-        // Redirect after a short delay
-        setTimeout(() => {
-          navigate("/review");
-        }, 2000);
+      setStatus("success");
+      toast({
+        title: "Success!",
+        description: "Successfully connected to Spotify.",
+      });
+      
+      // Redirect to review page after a short delay
+      setTimeout(() => {
+        navigate("/review");
+      }, 2000);
 
       } catch (error) {
         console.error("Callback error:", error);
@@ -80,7 +87,7 @@ const Callback = () => {
     };
 
     handleCallback();
-  }, [searchParams, navigate, setUser, setTokens]);
+  }, [searchParams, navigate, setUser, setTokens, connectSpotify, isAuthenticated]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-muted/30 to-background flex items-center justify-center">
