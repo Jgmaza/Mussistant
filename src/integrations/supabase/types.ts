@@ -14,9 +14,49 @@ export type Database = {
   }
   public: {
     Tables: {
+      playlist_logs: {
+        Row: {
+          created_at: string
+          id: string
+          matched_approx: number
+          matched_exact: number
+          not_found: number
+          playlist_name: string
+          spotify_playlist_id: string | null
+          spotify_playlist_url: string | null
+          total_tracks: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          matched_approx?: number
+          matched_exact?: number
+          not_found?: number
+          playlist_name: string
+          spotify_playlist_id?: string | null
+          spotify_playlist_url?: string | null
+          total_tracks: number
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          matched_approx?: number
+          matched_exact?: number
+          not_found?: number
+          playlist_name?: string
+          spotify_playlist_id?: string | null
+          spotify_playlist_url?: string | null
+          total_tracks?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string
+          default_market: string | null
           display_name: string | null
           email: string | null
           id: string
@@ -27,6 +67,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          default_market?: string | null
           display_name?: string | null
           email?: string | null
           id?: string
@@ -37,6 +78,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          default_market?: string | null
           display_name?: string | null
           email?: string | null
           id?: string
@@ -46,6 +88,101 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      spotify_accounts: {
+        Row: {
+          access_token: string
+          connected_at: string
+          country: string | null
+          created_at: string
+          display_name: string | null
+          id: string
+          refresh_token: string | null
+          scope: string
+          spotify_user_id: string
+          token_expires_at: string
+          token_type: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          access_token: string
+          connected_at?: string
+          country?: string | null
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          refresh_token?: string | null
+          scope: string
+          spotify_user_id: string
+          token_expires_at: string
+          token_type?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          access_token?: string
+          connected_at?: string
+          country?: string | null
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          refresh_token?: string | null
+          scope?: string
+          spotify_user_id?: string
+          token_expires_at?: string
+          token_type?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      track_matches: {
+        Row: {
+          confidence_score: number | null
+          created_at: string
+          id: string
+          match_type: string
+          matched_artist: string | null
+          matched_title: string | null
+          original_artist: string | null
+          original_title: string
+          playlist_log_id: string
+          spotify_track_id: string | null
+        }
+        Insert: {
+          confidence_score?: number | null
+          created_at?: string
+          id?: string
+          match_type: string
+          matched_artist?: string | null
+          matched_title?: string | null
+          original_artist?: string | null
+          original_title: string
+          playlist_log_id: string
+          spotify_track_id?: string | null
+        }
+        Update: {
+          confidence_score?: number | null
+          created_at?: string
+          id?: string
+          match_type?: string
+          matched_artist?: string | null
+          matched_title?: string | null
+          original_artist?: string | null
+          original_title?: string
+          playlist_log_id?: string
+          spotify_track_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "track_matches_playlist_log_id_fkey"
+            columns: ["playlist_log_id"]
+            isOneToOne: false
+            referencedRelation: "playlist_logs"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {

@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { Loader2, CheckCircle, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
-import { exchangeCodeForTokens } from "@/auth/spotifyAuth";
+import { exchangeCodeForTokens, handleSpotifyCallback } from "@/auth/spotifyAuth";
 import { getCurrentUserProfile } from "@/api/spotify";
 import { useSession } from "@/state/session";
 import { useSpotify } from "@/hooks/useSpotify";
@@ -39,21 +39,23 @@ const Callback = () => {
           throw new Error("No code verifier found. Please try logging in again.");
         }
 
-        // Exchange code for tokens
-        const tokens = await exchangeCodeForTokens(code, codeVerifier);
-        
-      // Store tokens in session for immediate use
-      setTokens({
-        access_token: tokens.access_token,
-        refresh_token: tokens.refresh_token,
-        expires_at: Date.now() + tokens.expires_in * 1000,
-      });
-
       // If user is authenticated with Supabase, connect Spotify to their profile
       if (isAuthenticated) {
-        await connectSpotify(tokens.access_token, tokens.refresh_token, tokens.expires_in);
+        // Handle the callback and get code + verifier
+        const { code: authCode, codeVerifier } = await handleSpotifyCallback(code);
+        await connectSpotify(authCode, codeVerifier);
       } else {
-        // For non-authenticated users, just get the profile for session
+        // For non-authenticated users, get tokens directly
+        const tokens = await exchangeCodeForTokens(code, codeVerifier);
+        
+        // Store tokens in session for immediate use
+        setTokens({
+          access_token: tokens.access_token,
+          refresh_token: tokens.refresh_token,
+          expires_at: Date.now() + tokens.expires_in * 1000,
+        });
+
+        // Get the profile for session
         const user = await getCurrentUserProfile(tokens.access_token);
         setUser(user);
       }

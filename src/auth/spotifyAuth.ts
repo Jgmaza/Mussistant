@@ -112,3 +112,16 @@ export async function loginWithSpotify(): Promise<void> {
   // Redirect to Spotify
   window.location.href = url;
 }
+
+// Handle callback and return code + verifier
+export async function handleSpotifyCallback(code: string): Promise<{ code: string; codeVerifier: string }> {
+  const codeVerifier = sessionStorage.getItem('spotify_code_verifier');
+  if (!codeVerifier) {
+    throw new Error('Missing code verifier');
+  }
+
+  // Clean up stored verifier
+  sessionStorage.removeItem('spotify_code_verifier');
+
+  return { code, codeVerifier };
+}

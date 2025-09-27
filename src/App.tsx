@@ -8,6 +8,7 @@ import Home from "./pages/Home";
 import Review from "./pages/Review";
 import Callback from "./pages/Callback";
 import Auth from "./pages/Auth";
+import Dashboard from "./pages/Dashboard";
 import SpotifyConnection from "./pages/SpotifyConnection";
 import NotFound from "./pages/NotFound";
 
@@ -24,6 +25,7 @@ const App = () => (
             <Route path="/" element={<Home />} />
             <Route path="/auth" element={<Auth />} />
             <Route path="/review" element={<Review />} />
+            <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/spotify-connection" element={<SpotifyConnection />} />
             <Route path="/callback" element={<Callback />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

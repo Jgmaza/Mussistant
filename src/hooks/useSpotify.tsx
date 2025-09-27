@@ -28,18 +28,20 @@ export function useSpotify() {
   const checkSpotifyConnection = async () => {
     try {
       setLoading(true);
-      const { data: profile, error } = await supabase
-        .from('profiles')
-        .select('spotify_connected, spotify_user_id')
-        .eq('user_id', user?.id)
-        .single();
+      const { data, error } = await supabase.functions.invoke('me-spotify');
 
       if (error) {
         console.error('Error checking Spotify connection:', error);
         return;
       }
 
-      setIsSpotifyConnected(!!profile?.spotify_connected);
+      setIsSpotifyConnected(data.connected);
+      if (data.connected) {
+        setSpotifyUser({
+          display_name: data.displayName,
+          country: data.country
+        });
+      }
     } catch (error) {
       console.error('Error checking Spotify connection:', error);
     } finally {
@@ -47,40 +49,35 @@ export function useSpotify() {
     }
   };
 
-  const connectSpotify = async (accessToken: string, refreshToken?: string, expiresIn?: number) => {
+  const connectSpotify = async (code: string, codeVerifier: string) => {
     try {
-      // Get Spotify user profile
-      const spotifyProfile = await getCurrentUserProfile(accessToken);
-      
-      // Update database with Spotify connection
-      const { error } = await supabase
-        .from('profiles')
-        .upsert({
-          user_id: user?.id,
-          spotify_connected: true,
-          spotify_user_id: spotifyProfile.id,
-          display_name: spotifyProfile.display_name || user?.email?.split('@')[0],
-          email: user?.email,
-        });
+      // Use the new callback endpoint
+      const { data, error } = await supabase.functions.invoke('spotify-callback', {
+        body: { code, codeVerifier }
+      });
 
       if (error) {
-        throw new Error(`Database update failed: ${error.message}`);
+        throw new Error(`Connection failed: ${error.message}`);
+      }
+
+      if (!data.success) {
+        throw new Error(data.error || 'Connection failed');
       }
 
       setIsSpotifyConnected(true);
-      setSpotifyUser(spotifyProfile);
+      setSpotifyUser(data.spotifyUser);
       
       toast({
         title: "Spotify Connected!",
-        description: `Successfully connected as ${spotifyProfile.display_name}`,
+        description: `Successfully connected as ${data.spotifyUser.displayName}`,
       });
 
-      return spotifyProfile;
+      return data.spotifyUser;
     } catch (error) {
       console.error('Error connecting Spotify:', error);
       toast({
         title: "Connection Failed",
-        description: "Failed to connect Spotify account",
+        description: error instanceof Error ? error.message : "Failed to connect Spotify account",
         variant: "destructive",
       });
       throw error;
@@ -89,58 +86,46 @@ export function useSpotify() {
 
   const createPlaylistFromSongs = async (songs: Array<{ title: string; artist?: string }>, playlistName: string) => {
     try {
-      const accessToken = await getValidAccessToken();
-      if (!accessToken) {
-        throw new Error('No valid Spotify access token');
-      }
+      // Get user's profile for market preference
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('default_market')
+        .eq('user_id', user?.id)
+        .single();
 
-      // Get user profile if not already loaded
-      let currentSpotifyUser = spotifyUser;
-      if (!currentSpotifyUser) {
-        currentSpotifyUser = await getCurrentUserProfile(accessToken);
-        setSpotifyUser(currentSpotifyUser);
-      }
+      const market = profile?.default_market || 'US';
 
-      // Search for tracks
-      const trackUris: string[] = [];
-      const searchPromises = songs.map(async (song) => {
-        try {
-          const query = song.artist ? `track:"${song.title}" artist:"${song.artist}"` : `track:"${song.title}"`;
-          const tracks = await searchTracks(accessToken, query, 1);
-          if (tracks.length > 0) {
-            trackUris.push(tracks[0].uri);
+      // Use the new create-playlist endpoint
+      const { data, error } = await supabase.functions.invoke('spotify-create-playlist', {
+        body: {
+          name: playlistName,
+          public: true,
+          market,
+          tracks: songs,
+          preferences: {
+            versionOrder: ["studio", "remaster", "live", "acoustic"],
+            noDuplicates: true,
+            albumPreference: "original"
           }
-        } catch (error) {
-          console.warn(`Failed to find track: ${song.title}`, error);
         }
       });
 
-      await Promise.all(searchPromises);
-
-      if (trackUris.length === 0) {
-        throw new Error('No tracks found on Spotify');
+      if (error) {
+        throw new Error(`Playlist creation failed: ${error.message}`);
       }
-
-      // Create playlist
-      const playlist = await createPlaylist(
-        accessToken,
-        currentSpotifyUser.id,
-        playlistName,
-        `Created by Musisstant from setlist with ${songs.length} songs`
-      );
-
-      // Add tracks to playlist
-      await addTracksToPlaylist(accessToken, playlist.id, trackUris);
 
       toast({
         title: "Playlist Created!",
-        description: `Created "${playlistName}" with ${trackUris.length} songs`,
+        description: `Created "${playlistName}" with ${data.summary.found}/${data.summary.total} songs`,
       });
 
       return {
-        playlist,
-        tracksAdded: trackUris.length,
-        totalSongs: songs.length,
+        playlistUrl: data.playlistUrl,
+        tracksAdded: data.summary.found,
+        totalSongs: data.summary.total,
+        summary: data.summary,
+        added: data.added,
+        notFound: data.notFound
       };
     } catch (error) {
       console.error('Error creating playlist:', error);
@@ -155,12 +140,10 @@ export function useSpotify() {
 
   const disconnectSpotify = async () => {
     try {
+      // Delete from spotify_accounts table
       const { error } = await supabase
-        .from('profiles')
-        .update({
-          spotify_connected: false,
-          spotify_user_id: null,
-        })
+        .from('spotify_accounts')
+        .delete()
         .eq('user_id', user?.id);
 
       if (error) {
