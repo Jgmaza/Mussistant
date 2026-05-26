@@ -1,137 +1,188 @@
-import { useState, useEffect } from 'react';
-import { useAuth } from '@/hooks/useAuth';
-import { supabase } from '@/integrations/supabase/client';
-import { getCurrentUserProfile, searchTracks, createPlaylist, addTracksToPlaylist } from '@/api/spotify';
-import { useSession } from '@/state/session';
-import { toast } from '@/hooks/use-toast';
+import {
+  createContext,
+  useState,
+  useEffect,
+  useCallback,
+  useContext,
+  ReactNode,
+} from "react";
+import { useAuth } from "@/hooks/useAuth";
+import {
+  getCurrentUserProfile,
+  createPlaylist,
+  addTracksToPlaylist,
+  SpotifyPlaylist,
+  SpotifyUser,
+} from "@/api/spotify";
+import { MatchedSong } from "@/store/setlistStore";
+import {
+  saveSpotifyConnection,
+  clearSpotifyConnection,
+  loadSpotifyConnection,
+  getValidSpotifyAccessToken,
+  tokensFromOAuth,
+  SpotifyTokenData,
+} from "@/lib/spotifyTokens";
+import { toast } from "@/hooks/use-toast";
 
-interface SpotifyCredentials {
-  access_token: string;
-  refresh_token?: string;
-  expires_at: number;
+interface SpotifyContextValue {
+  isSpotifyConnected: boolean;
+  loading: boolean;
+  spotifyUser: SpotifyUser | null;
+  connectSpotifyFromOAuth: (
+    accessToken: string,
+    refreshToken: string | undefined,
+    expiresIn: number,
+    supabaseUserId: string,
+    email?: string | null
+  ) => Promise<SpotifyUser>;
+  disconnectSpotify: () => Promise<void>;
+  createPlaylistFromMatches: (
+    matchedSongs: MatchedSong[],
+    playlistName: string
+  ) => Promise<{
+    playlist: SpotifyPlaylist;
+    tracksAdded: number;
+    totalSongs: number;
+    skipped: number;
+  }>;
+  hydrateSpotify: () => Promise<void>;
 }
 
-export function useSpotify() {
+const SpotifyContext = createContext<SpotifyContextValue | undefined>(
+  undefined
+);
+
+export function SpotifyProvider({ children }: { children: ReactNode }) {
   const { user, isAuthenticated } = useAuth();
-  const { getValidAccessToken } = useSession();
   const [isSpotifyConnected, setIsSpotifyConnected] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [spotifyUser, setSpotifyUser] = useState<any>(null);
+  const [spotifyUser, setSpotifyUser] = useState<SpotifyUser | null>(null);
 
-  // Check if user has Spotify connection
-  useEffect(() => {
-    if (isAuthenticated && user) {
-      checkSpotifyConnection();
+  const syncSession = useCallback(
+    (_tokens: SpotifyTokenData, profile: SpotifyUser) => {
+      setSpotifyUser(profile);
+      setIsSpotifyConnected(true);
+    },
+    []
+  );
+
+  const resetSpotifyState = useCallback(() => {
+    setIsSpotifyConnected(false);
+    setSpotifyUser(null);
+  }, []);
+
+  const hydrateSpotify = useCallback(async () => {
+    if (!user?.id) {
+      resetSpotifyState();
+      setLoading(false);
+      return;
     }
-  }, [isAuthenticated, user]);
 
-  const checkSpotifyConnection = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase.functions.invoke('me-spotify');
-
-      if (error) {
-        console.error('Error checking Spotify connection:', error);
-        return;
-      }
-
-      setIsSpotifyConnected(data.connected);
-      if (data.connected) {
-        setSpotifyUser({
-          display_name: data.displayName,
-          country: data.country
-        });
+      const connection = await loadSpotifyConnection(user.id);
+      if (connection) {
+        syncSession(connection.tokens, connection.spotifyUser);
+      } else {
+        resetSpotifyState();
       }
     } catch (error) {
-      console.error('Error checking Spotify connection:', error);
+      console.error("hydrateSpotify:", error);
+      resetSpotifyState();
     } finally {
       setLoading(false);
     }
-  };
+  }, [user?.id, syncSession, resetSpotifyState]);
 
-  const connectSpotify = async (code: string, codeVerifier: string) => {
-    try {
-      // Use the new callback endpoint
-      const { data, error } = await supabase.functions.invoke('spotify-callback', {
-        body: { code, codeVerifier }
-      });
-
-      if (error) {
-        throw new Error(`Connection failed: ${error.message}`);
-      }
-
-      if (!data.success) {
-        throw new Error(data.error || 'Connection failed');
-      }
-
-      setIsSpotifyConnected(true);
-      setSpotifyUser(data.spotifyUser);
-      
-      toast({
-        title: "Spotify Connected!",
-        description: `Successfully connected as ${data.spotifyUser.displayName}`,
-      });
-
-      return data.spotifyUser;
-    } catch (error) {
-      console.error('Error connecting Spotify:', error);
-      toast({
-        title: "Connection Failed",
-        description: error instanceof Error ? error.message : "Failed to connect Spotify account",
-        variant: "destructive",
-      });
-      throw error;
+  useEffect(() => {
+    if (isAuthenticated && user) {
+      hydrateSpotify();
+    } else {
+      resetSpotifyState();
+      setLoading(false);
     }
+  }, [isAuthenticated, user?.id, hydrateSpotify, resetSpotifyState]);
+
+  const connectSpotifyFromOAuth = async (
+    accessToken: string,
+    refreshToken: string | undefined,
+    expiresIn: number,
+    supabaseUserId: string,
+    email?: string | null
+  ) => {
+    const tokens = tokensFromOAuth(accessToken, refreshToken, expiresIn);
+    const spotifyProfile = await getCurrentUserProfile(tokens.access_token);
+    await saveSpotifyConnection(supabaseUserId, tokens, spotifyProfile, email);
+    syncSession(tokens, spotifyProfile);
+    return spotifyProfile;
   };
 
-  const createPlaylistFromSongs = async (songs: Array<{ title: string; artist?: string }>, playlistName: string) => {
+  const createPlaylistFromMatches = async (
+    matchedSongs: MatchedSong[],
+    playlistName: string
+  ): Promise<{
+    playlist: SpotifyPlaylist;
+    tracksAdded: number;
+    totalSongs: number;
+    skipped: number;
+  }> => {
+    if (!user?.id) {
+      throw new Error("Debes iniciar sesión");
+    }
+
     try {
-      // Get user's profile for market preference
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('default_market')
-        .eq('user_id', user?.id)
-        .single();
-
-      const market = profile?.default_market || 'US';
-
-      // Use the new create-playlist endpoint
-      const { data, error } = await supabase.functions.invoke('spotify-create-playlist', {
-        body: {
-          name: playlistName,
-          public: true,
-          market,
-          tracks: songs,
-          preferences: {
-            versionOrder: ["studio", "remaster", "live", "acoustic"],
-            noDuplicates: true,
-            albumPreference: "original"
-          }
-        }
-      });
-
-      if (error) {
-        throw new Error(`Playlist creation failed: ${error.message}`);
+      const accessToken = await getValidSpotifyAccessToken(user.id);
+      if (!accessToken) {
+        throw new Error(
+          "No hay sesión de Spotify. Ve a Conectar Spotify e inicia el flujo otra vez."
+        );
       }
 
+      let currentSpotifyUser = spotifyUser;
+      if (!currentSpotifyUser) {
+        currentSpotifyUser = await getCurrentUserProfile(accessToken);
+        setSpotifyUser(currentSpotifyUser);
+        setIsSpotifyConnected(true);
+      }
+
+      const trackUris = matchedSongs
+        .map((song) => song.spotifyMatch?.uri)
+        .filter((uri): uri is string => !!uri);
+
+      if (trackUris.length === 0) {
+        throw new Error(
+          "No hay canciones con match en Spotify para crear la playlist"
+        );
+      }
+
+      const playlist = await createPlaylist(
+        accessToken,
+        playlistName,
+        `Creada por Mussistant · ${matchedSongs.length} canciones del setlist`
+      );
+
+      await addTracksToPlaylist(accessToken, playlist.id, trackUris);
+
+      const skipped = matchedSongs.length - trackUris.length;
+
       toast({
-        title: "Playlist Created!",
-        description: `Created "${playlistName}" with ${data.summary.found}/${data.summary.total} songs`,
+        title: "Playlist creada",
+        description: `"${playlistName}" con ${trackUris.length} canciones`,
       });
 
       return {
-        playlistUrl: data.playlistUrl,
-        tracksAdded: data.summary.found,
-        totalSongs: data.summary.total,
-        summary: data.summary,
-        added: data.added,
-        notFound: data.notFound
+        playlist,
+        tracksAdded: trackUris.length,
+        totalSongs: matchedSongs.length,
+        skipped,
       };
     } catch (error) {
-      console.error('Error creating playlist:', error);
+      console.error("Error creating playlist:", error);
       toast({
-        title: "Playlist Creation Failed",
-        description: error instanceof Error ? error.message : "Failed to create playlist",
+        title: "Error al crear playlist",
+        description:
+          error instanceof Error ? error.message : "No se pudo crear la playlist",
         variant: "destructive",
       });
       throw error;
@@ -139,41 +190,45 @@ export function useSpotify() {
   };
 
   const disconnectSpotify = async () => {
+    if (!user?.id) return;
+
     try {
-      // Delete from spotify_accounts table
-      const { error } = await supabase
-        .from('spotify_accounts')
-        .delete()
-        .eq('user_id', user?.id);
-
-      if (error) {
-        throw error;
-      }
-
-      setIsSpotifyConnected(false);
-      setSpotifyUser(null);
-      
+      await clearSpotifyConnection(user.id);
+      resetSpotifyState();
       toast({
-        title: "Spotify Disconnected",
-        description: "Your Spotify account has been disconnected",
+        title: "Spotify desconectado",
+        description: "Tu cuenta de Spotify se desvinculó de Mussistant",
       });
     } catch (error) {
-      console.error('Error disconnecting Spotify:', error);
+      console.error("Error disconnecting Spotify:", error);
       toast({
-        title: "Disconnection Failed",
-        description: "Failed to disconnect Spotify account",
+        title: "Error al desconectar",
+        description:
+          error instanceof Error ? error.message : "No se pudo desconectar",
         variant: "destructive",
       });
     }
   };
 
-  return {
+  const value: SpotifyContextValue = {
     isSpotifyConnected,
     loading,
     spotifyUser,
-    connectSpotify,
+    connectSpotifyFromOAuth,
     disconnectSpotify,
-    createPlaylistFromSongs,
-    checkSpotifyConnection,
+    createPlaylistFromMatches,
+    hydrateSpotify,
   };
+
+  return (
+    <SpotifyContext.Provider value={value}>{children}</SpotifyContext.Provider>
+  );
+}
+
+export function useSpotify() {
+  const context = useContext(SpotifyContext);
+  if (context === undefined) {
+    throw new Error("useSpotify debe usarse dentro de SpotifyProvider");
+  }
+  return context;
 }

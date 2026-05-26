@@ -1,4 +1,4 @@
-# Musisstant
+# Mussistant
 
 Your AI music assistant for Spotify playlists. Transform setlists into Spotify playlists in minutes with OCR support, user authentication, and intelligent matching.
 
@@ -40,27 +40,25 @@ Your AI music assistant for Spotify playlists. Transform setlists into Spotify p
 
 - Node.js 18+ and npm/yarn/pnpm/bun
 - Spotify Developer Account
-- Supabase Account (already connected)
+- Supabase Account ([setup guide](docs/SUPABASE_SETUP.md))
 
 ### Setup
 
 1. **Clone and install dependencies:**
 ```bash
-git clone <YOUR_GIT_URL>
-cd <YOUR_PROJECT_NAME>
+git clone https://github.com/Jgmaza/Mussistant.git
+cd Mussistant
 npm install
 ```
 
-2. **Configure Spotify App:**
-   - Go to [Spotify Developer Dashboard](https://developer.spotify.com/dashboard/)
-   - Create a new app
-   - Set redirect URI to: `http://localhost:8080/callback`
+2. **Configure Spotify App:** see [docs/SPOTIFY_SETUP.md](docs/SPOTIFY_SETUP.md)
+   - Redirect URI: `http://127.0.0.1:8080/callback` (`localhost` no está permitido por Spotify)
    - Note your Client ID
 
 3. **Environment Setup:**
 ```bash
 cp .env.example .env
-# Edit .env with your Spotify Client ID
+# Edit .env: Supabase URL + anon key (see docs/SUPABASE_SETUP.md) and Spotify Client ID
 ```
 
 4. **Start Development Server:**
@@ -68,14 +66,14 @@ cp .env.example .env
 npm run dev
 ```
 
-Visit http://localhost:8080 to use the app!
+Visit http://127.0.0.1:8080 to use the app!
 
 ## Environment Variables
 
 | Variable | Description | Required |
 |----------|-------------|----------|
 | `VITE_SPOTIFY_CLIENT_ID` | Your Spotify app's Client ID | ✅ |
-| `VITE_REDIRECT_URI` | OAuth redirect URI (default: localhost:8080/callback) | ✅ |
+| `VITE_REDIRECT_URI` | OAuth redirect URI (default: http://127.0.0.1:8080/callback) | ✅ |
 | `VITE_APP_NAME` | App name for branding | ❌ |
 
 ## Usage

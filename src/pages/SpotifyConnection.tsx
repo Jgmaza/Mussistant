@@ -1,49 +1,53 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { ArrowLeft, Music, ExternalLink, CheckCircle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { useNavigate } from "react-router-dom";
 import { loginWithSpotify } from "@/auth/spotifyAuth";
-import { useAuth } from "@/hooks/useAuth";
-import { toast } from "@/hooks/use-toast";
+import { useAuth, AUTH_RETURN_KEY } from "@/hooks/useAuth";
+import { useSpotify } from "@/hooks/useSpotify";
 
 const SpotifyConnection = () => {
   const navigate = useNavigate();
-  const { user, isAuthenticated } = useAuth();
+  const { isAuthenticated, loading: authLoading } = useAuth();
+  const { isSpotifyConnected, spotifyUser, loading, disconnectSpotify } =
+    useSpotify();
   const [isConnecting, setIsConnecting] = useState(false);
 
-  // Redirect if not authenticated
-  React.useEffect(() => {
+  useEffect(() => {
+    if (authLoading) return;
     if (!isAuthenticated) {
-      toast({
-        title: "Authentication Required",
-        description: "Please sign in to connect your Spotify account.",
-      });
-      navigate("/auth");
+      sessionStorage.setItem(AUTH_RETURN_KEY, "/spotify-connection");
+      navigate("/auth?next=/spotify-connection", { replace: true });
     }
-  }, [isAuthenticated, navigate]);
+  }, [authLoading, isAuthenticated, navigate]);
 
   const handleConnectSpotify = async () => {
+    if (authLoading) return;
+
+    if (!isAuthenticated) {
+      sessionStorage.setItem(AUTH_RETURN_KEY, "/spotify-connection");
+      navigate("/auth?next=/spotify-connection");
+      return;
+    }
+
     try {
       setIsConnecting(true);
-      await loginWithSpotify();
+      await loginWithSpotify("/spotify-connection");
     } catch (error) {
       console.error("Error connecting to Spotify:", error);
-      toast({
-        title: "Connection Failed",
-        description: "Failed to connect to Spotify. Please try again.",
-        variant: "destructive",
-      });
       setIsConnecting(false);
     }
   };
 
-  if (!isAuthenticated) {
+  if (authLoading || !isAuthenticated) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <Loader2 className="w-8 h-8 mx-auto animate-spin text-primary mb-4" />
-          <p>Redirecting to authentication...</p>
+          <p className="text-muted-foreground">
+            {authLoading ? "Verificando tu sesión..." : "Redirigiendo al inicio de sesión..."}
+          </p>
         </div>
       </div>
     );
@@ -52,7 +56,6 @@ const SpotifyConnection = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-muted/30 to-background">
       <div className="container mx-auto px-4 py-8 max-w-4xl">
-        {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <Button
             variant="ghost"
@@ -60,94 +63,93 @@ const SpotifyConnection = () => {
             className="flex items-center"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
-            Back to Review
+            Volver a revisar
           </Button>
-          
+
           <div className="text-center">
             <h1 className="text-3xl font-bold flex items-center justify-center gap-3">
               <Music className="w-8 h-8 text-primary" />
-              Connect Spotify
+              Conectar Spotify
             </h1>
             <p className="text-muted-foreground mt-2">
-              Link your Spotify account to create playlists
+              Vincula tu cuenta de Spotify con tu sesión de Mussistant
             </p>
           </div>
-          
-          <div /> {/* Spacer for centering */}
+
+          <div />
         </div>
 
-        {/* Connection Card */}
         <Card className="card-gradient shadow-lg">
           <CardHeader className="text-center">
             <div className="w-16 h-16 mx-auto mb-4 bg-green-500 rounded-full flex items-center justify-center">
               <Music className="w-8 h-8 text-white" />
             </div>
-            <h2 className="text-2xl font-bold">Connect Your Spotify Account</h2>
+            <h2 className="text-2xl font-bold">Tu cuenta de Mussistant</h2>
             <p className="text-muted-foreground">
-              To create playlists from your setlists, we need access to your Spotify account.
+              Al conectar, la playlist del setlist se creará en tu biblioteca de
+              Spotify.
             </p>
           </CardHeader>
-          
+
           <CardContent className="space-y-6">
-            {/* Features */}
             <div className="grid gap-4">
               <div className="flex items-center gap-3">
                 <CheckCircle className="w-5 h-5 text-green-500" />
-                <span>Create playlists automatically from your setlists</span>
+                <span>Crear playlists desde tus setlists</span>
               </div>
               <div className="flex items-center gap-3">
                 <CheckCircle className="w-5 h-5 text-green-500" />
-                <span>Search and match songs with Spotify's catalog</span>
+                <span>Buscar y emparejar canciones en el catálogo de Spotify</span>
               </div>
               <div className="flex items-center gap-3">
                 <CheckCircle className="w-5 h-5 text-green-500" />
-                <span>Secure OAuth 2.0 authentication</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <CheckCircle className="w-5 h-5 text-green-500" />
-                <span>Your data is stored securely and never shared</span>
+                <span>OAuth seguro — no compartimos tu contraseña de Spotify</span>
               </div>
             </div>
 
-            {/* Requirements */}
-            <div className="bg-muted/50 p-4 rounded-lg">
-              <h3 className="font-semibold mb-2">Requirements:</h3>
-              <ul className="text-sm text-muted-foreground space-y-1">
-                <li>• Active Spotify account (Free or Premium)</li>
-                <li>• Permission to create and modify playlists</li>
-                <li>• Access to read your email address</li>
-              </ul>
-            </div>
-
-            {/* Connect Button */}
-            <div className="text-center">
-              <Button
-                size="lg"
-                onClick={handleConnectSpotify}
-                disabled={isConnecting}
-                className="bg-green-500 hover:bg-green-600 text-white"
-              >
-                {isConnecting ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Connecting...
-                  </>
-                ) : (
-                  <>
-                    <ExternalLink className="w-4 h-4 mr-2" />
-                    Connect with Spotify
-                  </>
-                )}
-              </Button>
-            </div>
-
-            {/* Security Note */}
-            <div className="text-center text-sm text-muted-foreground">
-              <p>
-                By connecting, you'll be redirected to Spotify's secure login page.
-                We only request the minimum permissions needed to create playlists.
-              </p>
-            </div>
+            {loading ? (
+              <div className="flex justify-center py-4">
+                <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : isSpotifyConnected && spotifyUser ? (
+              <div className="space-y-4 text-center">
+                <p className="text-sm">
+                  Conectado como{" "}
+                  <span className="font-semibold">
+                    {spotifyUser.display_name ?? spotifyUser.id}
+                  </span>
+                </p>
+                <div className="flex flex-col sm:flex-row gap-2 justify-center">
+                  <Button onClick={() => navigate("/review")}>
+                    Ir a revisar setlist
+                  </Button>
+                  <Button variant="outline" onClick={() => disconnectSpotify()}>
+                    Desconectar
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center">
+                <Button
+                  size="lg"
+                  onClick={handleConnectSpotify}
+                  disabled={isConnecting}
+                  className="bg-green-500 hover:bg-green-600 text-white"
+                >
+                  {isConnecting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Redirigiendo a Spotify...
+                    </>
+                  ) : (
+                    <>
+                      <ExternalLink className="w-4 h-4 mr-2" />
+                      Conectar con Spotify
+                    </>
+                  )}
+                </Button>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

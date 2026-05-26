@@ -3,7 +3,8 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import { SessionProvider } from "@/state/session";
+import { AuthProvider } from "@/hooks/useAuth";
+import { SpotifyProvider } from "@/hooks/useSpotify";
 import Home from "./pages/Home";
 import Review from "./pages/Review";
 import Callback from "./pages/Callback";
@@ -16,7 +17,8 @@ const queryClient = new QueryClient();
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <SessionProvider>
+    <AuthProvider>
+    <SpotifyProvider>
       <TooltipProvider>
         <Toaster />
         <Sonner />
@@ -33,7 +35,8 @@ const App = () => (
           </Routes>
         </BrowserRouter>
       </TooltipProvider>
-    </SessionProvider>
+    </SpotifyProvider>
+    </AuthProvider>
   </QueryClientProvider>
 );
 

@@ -1,5 +1,6 @@
 // OCR utilities using Tesseract.js
 import Tesseract from "tesseract.js";
+import { cleanSetlistLine, isHeaderLine } from "@/utils/parse";
 
 // Process image and extract text using OCR
 export async function extractTextFromImage(
@@ -28,22 +29,11 @@ export function cleanExtractedText(rawText: string): string[] {
 
   return rawText
     .split("\n")
-    .map((line) => line.trim())
+    .map((line) => cleanSetlistLine(line))
     .filter((line) => line.length > 0)
-    .map((line) => {
-      // Remove common numbering patterns
-      line = line.replace(/^\d+[\.\)\-\s]+/, ""); // "1. ", "02 - ", "3) "
-      line = line.replace(/^[a-zA-Z][\.\)\-\s]+/, ""); // "A. ", "b) "
-      
-      // Clean up extra whitespace
-      line = line.replace(/\s+/g, " ");
-      
-      return line.trim();
-    })
     .filter((line) => {
-      // Filter out lines that are too short or look like headers/footers
       if (line.length < 2) return false;
-      if (/^(set\s*list|track\s*list|songs?|playlist)/i.test(line)) return false;
+      if (isHeaderLine(line)) return false;
       if (/^(page|date|time|venue)/i.test(line)) return false;
       return true;
     });

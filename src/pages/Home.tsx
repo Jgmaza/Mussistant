@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/use-toast";
 import { OcrDropzone } from "@/components/OcrDropzone";
-import { parseSetlistLines } from "@/utils/parse";
+import { parseSetlistFromText } from "@/utils/parse";
 import { useSetlistStore } from "@/store/setlistStore";
 import { useAuth } from "@/hooks/useAuth";
 import { Navbar } from "@/components/Navbar";
@@ -16,7 +16,7 @@ const Home = () => {
   const navigate = useNavigate();
   const [textInput, setTextInput] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
-  const { setParsedSongs } = useSetlistStore();
+  const { setParsedSongs, reset } = useSetlistStore();
   const { isAuthenticated } = useAuth();
 
   const handleTextSubmit = () => {
@@ -39,26 +39,31 @@ const Home = () => {
       return;
     }
 
-    const lines = textInput
-      .split("\n")
-      .map((line) => line.trim())
-      .filter((line) => line.length > 0);
+    reset();
+    const { songs, context, skippedLines } = parseSetlistFromText(textInput);
 
-    if (lines.length === 0) {
+    if (songs.length === 0) {
       toast({
-        title: "Invalid setlist",
-        description: "Please provide a valid setlist with song titles.",
+        title: "Setlist vacío",
+        description:
+          "No se detectaron canciones. Usa una línea por tema o un título de artistas en la primera línea.",
         variant: "destructive",
       });
       return;
     }
 
-    const parsed = parseSetlistLines(lines);
-    setParsedSongs(parsed);
-    
+    setParsedSongs(songs, context);
+
+    const contextNote =
+      context.artists.length > 0
+        ? ` Contexto: ${context.artists.join(", ")}.`
+        : skippedLines.length > 0
+          ? ` (${skippedLines.length} línea(s) de título omitidas).`
+          : "";
+
     toast({
-      title: "Setlist parsed successfully",
-      description: `Found ${parsed.length} songs. Ready to match with Spotify!`,
+      title: "Setlist listo",
+      description: `${songs.length} canciones detectadas.${contextNote}`,
     });
 
     navigate("/review");
@@ -84,12 +89,21 @@ const Home = () => {
       return;
     }
 
-    const parsed = parseSetlistLines(lines);
-    setParsedSongs(parsed);
-    
+    reset();
+    const { songs, context } = parseSetlistFromText(lines.join("\n"));
+    if (songs.length === 0) {
+      toast({
+        title: "Sin canciones",
+        description: "No se pudieron extraer títulos del texto OCR.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setParsedSongs(songs, context);
+
     toast({
-      title: "Image processed successfully",
-      description: `Extracted ${parsed.length} songs from your image!`,
+      title: "Imagen procesada",
+      description: `${songs.length} canciones extraídas.`,
     });
 
     navigate("/review");
@@ -108,7 +122,7 @@ const Home = () => {
               </div>
             </div>
             <h1 className="text-4xl md:text-6xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent mb-4">
-              Musisstant
+              Mussistant
             </h1>
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
               Your AI music assistant. Transform setlists into Spotify playlists in minutes. 
@@ -146,7 +160,7 @@ const Home = () => {
                   <Label htmlFor="setlist-text">Setlist</Label>
                   <Textarea
                     id="setlist-text"
-                    placeholder="Paste your setlist here...&#10;&#10;Song Title - Artist&#10;Another Song&#10;Third Song - Different Artist"
+                    placeholder={"Juan Luis Guerra y Maná\n1. La hormiguita\n2. Vivir sin aire Ch Eb\n3. Bachata rosa\n\nPrimera línea = artistas (opcional). Se limpian números y acordes."}
                     value={textInput}
                     onChange={(e) => setTextInput(e.target.value)}
                     className="min-h-[200px] resize-y"

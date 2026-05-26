@@ -1,12 +1,20 @@
-// Environment configuration for Musisstant
+function readEnv(value: string | undefined, fallback: string): string {
+  const raw = (value ?? fallback).trim();
+  return raw.replace(/^["']|["']$/g, "");
+}
+
+// Environment configuration for Mussistant
 export const config = {
   spotify: {
-    clientId: import.meta.env.VITE_SPOTIFY_CLIENT_ID || "your_spotify_client_id",
-    redirectUri: import.meta.env.VITE_REDIRECT_URI || "http://localhost:8080/callback",
+    clientId: readEnv(import.meta.env.VITE_SPOTIFY_CLIENT_ID, "your_spotify_client_id"),
+    redirectUri: readEnv(
+      import.meta.env.VITE_REDIRECT_URI,
+      "http://127.0.0.1:8080/callback"
+    ),
     scopes: ["playlist-modify-public", "playlist-modify-private", "user-read-email"],
   },
   app: {
-    name: import.meta.env.VITE_APP_NAME || "Musisstant",
+    name: import.meta.env.VITE_APP_NAME || "Mussistant",
   },
 } as const;
 

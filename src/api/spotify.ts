@@ -36,6 +36,23 @@ export interface SpotifyPlaylist {
   };
 }
 
+async function parseSpotifyError(
+  response: Response,
+  fallback: string
+): Promise<string> {
+  try {
+    const body = await response.json();
+    const message =
+      body?.error?.message ?? body?.error_description ?? body?.message;
+    if (message) {
+      return `${fallback}: ${message}`;
+    }
+  } catch {
+    // ignore JSON parse errors
+  }
+  return `${fallback} (${response.status})`;
+}
+
 // Get current user profile
 export async function getCurrentUserProfile(accessToken: string): Promise<SpotifyUser> {
   const response = await fetch("https://api.spotify.com/v1/me", {
@@ -45,7 +62,7 @@ export async function getCurrentUserProfile(accessToken: string): Promise<Spotif
   });
 
   if (!response.ok) {
-    throw new Error(`Failed to get user profile: ${response.statusText}`);
+    throw new Error(await parseSpotifyError(response, "No se pudo obtener tu perfil de Spotify"));
   }
 
   return response.json();
@@ -68,21 +85,20 @@ export async function searchTracks(
   );
 
   if (!response.ok) {
-    throw new Error(`Search failed: ${response.statusText}`);
+    throw new Error(await parseSpotifyError(response, "La búsqueda en Spotify falló"));
   }
 
   const result: SpotifySearchResult = await response.json();
   return result.tracks.items;
 }
 
-// Create a new playlist
+// Create a new playlist for the current user
 export async function createPlaylist(
   accessToken: string,
-  userId: string,
   name: string,
   description?: string
 ): Promise<SpotifyPlaylist> {
-  const response = await fetch(`https://api.spotify.com/v1/users/${userId}/playlists`, {
+  const response = await fetch("https://api.spotify.com/v1/me/playlists", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -96,38 +112,40 @@ export async function createPlaylist(
   });
 
   if (!response.ok) {
-    throw new Error(`Failed to create playlist: ${response.statusText}`);
+    throw new Error(await parseSpotifyError(response, "No se pudo crear la playlist"));
   }
 
   return response.json();
 }
 
-// Add tracks to playlist
+// Add tracks to playlist (Spotify Web API: Add Items to Playlist)
 export async function addTracksToPlaylist(
   accessToken: string,
   playlistId: string,
   trackUris: string[]
 ): Promise<void> {
-  // Spotify API limits to 100 tracks per request
   const chunks = [];
   for (let i = 0; i < trackUris.length; i += 100) {
     chunks.push(trackUris.slice(i, i + 100));
   }
 
   for (const chunk of chunks) {
-    const response = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}/tracks`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        uris: chunk,
-      }),
-    });
+    const response = await fetch(
+      `https://api.spotify.com/v1/playlists/${playlistId}/items`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ uris: chunk }),
+      }
+    );
 
     if (!response.ok) {
-      throw new Error(`Failed to add tracks to playlist: ${response.statusText}`);
+      throw new Error(
+        await parseSpotifyError(response, "No se pudieron añadir canciones a la playlist")
+      );
     }
   }
 }

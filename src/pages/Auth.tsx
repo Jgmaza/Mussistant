@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, Link, useSearchParams } from "react-router-dom";
 import { Music, Mail, Lock, User, ArrowLeft, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
@@ -7,11 +7,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuth, AUTH_RETURN_KEY } from "@/hooks/useAuth";
 import { config } from "@/config/env";
+import { isSupabaseConfigured } from "@/integrations/supabase/client";
 
 const Auth = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { user, signIn, signUp, loading } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
@@ -20,12 +22,22 @@ const Auth = () => {
     confirmPassword: "",
   });
 
-  // Redirect if already authenticated
+  const getReturnPath = () => {
+    const fromQuery = searchParams.get("next");
+    if (fromQuery && fromQuery.startsWith("/")) return fromQuery;
+    const fromStorage = sessionStorage.getItem(AUTH_RETURN_KEY);
+    if (fromStorage && fromStorage.startsWith("/")) return fromStorage;
+    return "/";
+  };
+
+  // Redirect if already authenticated (volver a Spotify, review, etc.)
   useEffect(() => {
     if (user && !loading) {
-      navigate("/");
+      const returnPath = getReturnPath();
+      sessionStorage.removeItem(AUTH_RETURN_KEY);
+      navigate(returnPath, { replace: true });
     }
-  }, [user, loading, navigate]);
+  }, [user, loading, navigate, searchParams]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({
@@ -57,7 +69,9 @@ const Auth = () => {
           variant: "destructive",
         });
       } else {
-        navigate("/");
+        const returnPath = getReturnPath();
+        sessionStorage.removeItem(AUTH_RETURN_KEY);
+        navigate(returnPath, { replace: true });
       }
     } catch (error) {
       console.error("Sign in error:", error);
@@ -166,6 +180,14 @@ const Auth = () => {
             Your AI music assistant for Spotify playlists
           </p>
         </div>
+
+        {!isSupabaseConfigured && (
+          <div className="mb-6 rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
+            Supabase no está configurado. Crea un proyecto nuevo y actualiza{" "}
+            <code className="text-xs">.env</code> — ver{" "}
+            <code className="text-xs">docs/SUPABASE_SETUP.md</code>.
+          </div>
+        )}
 
         <Card className="card-gradient shadow-lg">
           <CardHeader>

@@ -1,102 +1,116 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Loader2, CheckCircle, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
-import { exchangeCodeForTokens, handleSpotifyCallback } from "@/auth/spotifyAuth";
-import { getCurrentUserProfile } from "@/api/spotify";
-import { useSession } from "@/state/session";
+import { exchangeCodeForTokens } from "@/auth/spotifyAuth";
 import { useSpotify } from "@/hooks/useSpotify";
-import { useAuth } from "@/hooks/useAuth";
+import { AUTH_RETURN_KEY } from "@/hooks/useAuth";
+import { waitForAuthenticatedUser } from "@/lib/authSession";
 import { toast } from "@/hooks/use-toast";
+
+const RETURN_PATH_KEY = "spotify_return_path";
+const PENDING_CODE_KEY = "spotify_pending_code";
 
 const Callback = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { setUser, setTokens } = useSession();
-  const { connectSpotify } = useSpotify();
-  const { isAuthenticated } = useAuth();
-  const [status, setStatus] = useState<"processing" | "success" | "error">("processing");
+  const { connectSpotifyFromOAuth } = useSpotify();
+  const [status, setStatus] = useState<"processing" | "success" | "error">(
+    "processing"
+  );
   const [errorMessage, setErrorMessage] = useState("");
+  const handled = useRef(false);
 
   useEffect(() => {
+    if (handled.current) return;
+
     const handleCallback = async () => {
+      handled.current = true;
+
       try {
-        const code = searchParams.get("code");
+        const code =
+          searchParams.get("code") ??
+          sessionStorage.getItem(PENDING_CODE_KEY);
         const error = searchParams.get("error");
-        
+
         if (error) {
-          throw new Error(`Authorization failed: ${error}`);
+          throw new Error(`Spotify rechazó la autorización: ${error}`);
         }
 
         if (!code) {
-          throw new Error("No authorization code received");
+          throw new Error("No se recibió el código de autorización");
         }
 
-        // Get the stored code verifier
+        sessionStorage.removeItem(PENDING_CODE_KEY);
+
+        const authUser = await waitForAuthenticatedUser();
+        if (!authUser) {
+          sessionStorage.setItem(PENDING_CODE_KEY, code);
+          sessionStorage.setItem(
+            AUTH_RETURN_KEY,
+            `/callback${window.location.search || `?code=${encodeURIComponent(code)}`}`
+          );
+          navigate("/auth?next=/callback", { replace: true });
+          return;
+        }
+
         const codeVerifier = sessionStorage.getItem("spotify_code_verifier");
         if (!codeVerifier) {
-          throw new Error("No code verifier found. Please try logging in again.");
+          throw new Error(
+            "Sesión OAuth expirada. Vuelve a Conectar Spotify desde la app."
+          );
         }
 
-      // If user is authenticated with Supabase, connect Spotify to their profile
-      if (isAuthenticated) {
-        // Handle the callback and get code + verifier
-        const { code: authCode, codeVerifier } = await handleSpotifyCallback(code);
-        await connectSpotify(authCode, codeVerifier);
-      } else {
-        // For non-authenticated users, get tokens directly
         const tokens = await exchangeCodeForTokens(code, codeVerifier);
-        
-        // Store tokens in session for immediate use
-        setTokens({
-          access_token: tokens.access_token,
-          refresh_token: tokens.refresh_token,
-          expires_at: Date.now() + tokens.expires_in * 1000,
+        await connectSpotifyFromOAuth(
+          tokens.access_token,
+          tokens.refresh_token,
+          tokens.expires_in,
+          authUser.id,
+          authUser.email
+        );
+
+        sessionStorage.removeItem("spotify_code_verifier");
+
+        setStatus("success");
+        toast({
+          title: "Listo",
+          description: "Spotify conectado a tu cuenta de Mussistant.",
         });
 
-        // Get the profile for session
-        const user = await getCurrentUserProfile(tokens.access_token);
-        setUser(user);
-      }
+        const returnPath =
+          sessionStorage.getItem(RETURN_PATH_KEY) || "/review";
+        sessionStorage.removeItem(RETURN_PATH_KEY);
 
-      
-      // Clean up
-      sessionStorage.removeItem("spotify_code_verifier");
-
-      setStatus("success");
-      toast({
-        title: "Success!",
-        description: "Successfully connected to Spotify.",
-      });
-      
-      // Redirect to review page after a short delay
-      setTimeout(() => {
-        navigate("/review");
-      }, 2000);
-
-      } catch (error) {
-        console.error("Callback error:", error);
+        setTimeout(() => {
+          navigate(returnPath, { replace: true });
+        }, 1200);
+      } catch (err) {
+        console.error("Callback error:", err);
+        handled.current = false;
         setStatus("error");
-        setErrorMessage(error instanceof Error ? error.message : "Unknown error occurred");
-        
+        setErrorMessage(
+          err instanceof Error ? err.message : "Error desconocido"
+        );
         toast({
-          title: "Login failed",
-          description: error instanceof Error ? error.message : "Failed to connect to Spotify",
+          title: "Error al conectar Spotify",
+          description:
+            err instanceof Error ? err.message : "No se pudo completar la conexión",
           variant: "destructive",
         });
       }
     };
 
     handleCallback();
-  }, [searchParams, navigate, setUser, setTokens, connectSpotify, isAuthenticated]);
+  }, [searchParams, navigate, connectSpotifyFromOAuth]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-muted/30 to-background flex items-center justify-center">
       <div className="container mx-auto px-4 max-w-md">
         <Card className="card-gradient shadow-lg">
           <CardHeader className="text-center">
-            <h1 className="text-2xl font-bold">Connecting to Spotify</h1>
+            <h1 className="text-2xl font-bold">Conectando Spotify</h1>
           </CardHeader>
           <CardContent className="text-center space-y-6">
             {status === "processing" && (
@@ -107,9 +121,9 @@ const Callback = () => {
                   </div>
                 </div>
                 <div>
-                  <h3 className="font-semibold mb-2">Authenticating...</h3>
+                  <h3 className="font-semibold mb-2">Vinculando cuentas...</h3>
                   <p className="text-muted-foreground text-sm">
-                    Setting up your Spotify connection
+                    Verificando tu sesión en Mussistant y guardando Spotify
                   </p>
                 </div>
               </div>
@@ -123,9 +137,9 @@ const Callback = () => {
                   </div>
                 </div>
                 <div>
-                  <h3 className="font-semibold mb-2 text-accent">Connected!</h3>
+                  <h3 className="font-semibold mb-2 text-accent">Conectado</h3>
                   <p className="text-muted-foreground text-sm">
-                    Redirecting you back to the app...
+                    Redirigiendo...
                   </p>
                 </div>
               </div>
@@ -139,16 +153,27 @@ const Callback = () => {
                   </div>
                 </div>
                 <div>
-                  <h3 className="font-semibold mb-2 text-destructive">Connection Failed</h3>
+                  <h3 className="font-semibold mb-2 text-destructive">Falló</h3>
                   <p className="text-muted-foreground text-sm mb-4">
                     {errorMessage}
                   </p>
-                  <Button
-                    variant="outline"
-                    onClick={() => navigate("/")}
-                  >
-                    Go Back Home
-                  </Button>
+                  <div className="flex flex-col gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => navigate("/spotify-connection")}
+                    >
+                      Reintentar conexión
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      onClick={() => {
+                        sessionStorage.setItem(AUTH_RETURN_KEY, "/spotify-connection");
+                        navigate("/auth?next=/spotify-connection");
+                      }}
+                    >
+                      Iniciar sesión en Mussistant
+                    </Button>
+                  </div>
                 </div>
               </div>
             )}
